@@ -1,0 +1,213 @@
+---
+title: "108各科相關係數矩陣"
+output: html_notebook
+---
+
+
+goal:各考科的相關係數矩陣。
+
+令一組合為$Y$，$X_1$、$X_2$、$X_3$為它所採計的科目，則$Y = X_1 + X_2 + X_3$，且$$Var(Y) = Var(X_1) + Var(X_2) + Var(X_3) + 2( Cov(X_1,X_2)+Cov(X_1,X_3)+Cov(X_2,X_3))$$
+。
+已知可以用公開資料 '各科成績人數分配' 求出各科的變異數$Var(X_1)、Var(X_2)、Var(X_3)$；用'各組合成績人數分配'求出各組合的變異數$Var(Y)$。
+因此將每種組合整理成以下形式的式子: 
+$$( Var(Y)-Var(X_1)-Var(X_2)-Var(X_3) )/2 = Cov(X_1,X_2) + Cov(X_1,X_3) + Cov(X_2,X_3)$$
+
+，而其中$Cov(X_1,X_2)$與相關係數的關係為$\sigma_{12} = \sigma_1\sigma_2\rho_{12}$。
+
+則n種組合有n條式子，而總共10個科目，因此n條式子裡的未知相關係數有10\*9/2=45個。把這n條式子之右式寫成矩陣[n,45]的形式，
+用迴歸y = x\*β + ε 去估計出相關係數$\rho_{12}、\rho_{13}、\rho_{23} ...\rho_{9  10}$，
+其中y是n\*1的vector(each entry is $Var(Y_i) - Var(X_1)-Var(X_2) - … Var(X_c) )/2$, x是一個 n\*45 的matrix(每個entry值是$\sigma_a\sigma_b$), β是45*1的相關係數vector。
+
+若用OLS估計出來的相關係數有大於1者，再用ridge regression去做估計，以控制所有的相關係數在0到1之間。
+
+
+
+
+
+## 各科變異數
+國,英,數甲,數乙,歷,地,公,物,化,生
+
+For each subject, store each student's score in 'each_stud_score', and calculate its variance.  //each_subj_var[10]
+
+移除分數最低的0.1%者 
+```{r}
+df1 = read.csv("../data/108 各科之分數分布.csv")  #ASCII
+
+stud_cnt = colSums(df1)  # number of students of each subject
+
+each_subj_var<- vector("double", length = 10)   #variance of each subject
+each_subj_mean<- vector("double", length = 10)   #mean of each subject
+
+for(x in 1:10)
+{
+    each_stud_score <- vector("double", length = stud_cnt[x])   #scores of each student
+    chinese = df1[,x]                     #distribution of # of students (each subject)
+    grade = 100
+    cnt = 1
+    for(i in 1:101){
+      for(j in 1:chinese[i]){
+         if(chinese[i] == 0 )
+              next;
+         each_stud_score[cnt] = grade    #scores of each student
+         cnt = cnt+1
+      }
+      if(grade==100) grade=grade-0.5
+      else grade = grade-1
+    }
+    
+    n = cnt-1                                      #真正的總人數 of subject1
+    #discount persons
+    n = floor(n * 0.999)
+    each_subj_var[x] = var(each_stud_score[1:n])*(n-1)/n
+    each_subj_mean[x] = sum(each_stud_score[1:n])/n
+    #each_subj_mean[x] = sum(each_stud_score[n1:n])/(n-n1+1) 
+    #print(each_subj_var[x])
+    rm(each_stud_score)   #remove the vector
+}
+each_subj_var
+```
+
+## 各組合變異數
+移除分數<3者，再移除分數最低0.5%者 
+
+For each group, store each student's score in 'each_stud_score', and calculate its variance.
+```{r}
+df2 = read.csv("../data/108 各組合之分數分布.csv")
+grade_array = df2[,2]
+num_of_people_array = df2[,3]
+each_stud_score<- vector("double", length = 49000)   #temp, scores of each student(each group)
+each_group_var<- vector("double", length = 58)       #variance of each group
+each_group_mean<- vector("double", length = 58)     #mean of each group
+
+for(i in 0:57)     #total 58 groups: 0-57
+{  
+  #scores of each student of a subject
+  cnt=1
+  a =1+i*100
+  b=100+i*100
+  for(j in a:b)
+  {
+      if(num_of_people_array[j] == 0 )
+          next;
+      for(xxx in 1:num_of_people_array[j]){
+          #each_stud_score[cnt] = grade_array[j]
+          #cnt = cnt+1  
+          
+          #filter out 0 score. 
+          if(grade_array[j] > 3) {
+            each_stud_score[cnt] = grade_array[j]
+            cnt = cnt+1  
+          }
+      }
+  }
+  
+  n = cnt-1                                      #真正的總人數 of group1
+  #discount persons
+  n = floor(n * 0.995)
+  #n1=floor(n * 0.9)
+  each_group_var[i+1] = var(each_stud_score[1:n])*(n-1)/n    #variance of group1
+  each_group_mean[i+1] = sum(each_stud_score[1:n])/(n) 
+  #cat(n," ",each_group_var[i+1],"\n")      #print 各組合人數&變異數
+}
+```
+
+## 科目組合矩陣[n,45]
+```{r}
+df3 = read.csv("../data/108 各組合之採計科目.csv")
+
+sigma_index = c("12","13","14","15","16","17","18","19","110","23","24","25","26","27","28","29","210","34","35","36","37","38","39","310","45","46","47","48","49","410","56","57","58","59","510","67","68","69","610","78","79","710","89","810","910")
+
+
+# 科目組合矩陣 x:各組合所包含的變異數(權重=1)  y:共60組合
+mtrx <- matrix(0,nrow=58,ncol=45)   
+colnames(mtrx) = sigma_index
+
+#兩科目在同一組合中之次數
+inSameGroup <- matrix(nrow = 10, ncol = 10)  
+colnames(inSameGroup) = c('國','英','數甲','數乙','歷','地','公','物','化','生')
+rownames(inSameGroup)= c('國','英','數甲','數乙','歷','地','公','物','化','生')
+for(i in 1:9)
+  for(j in (i+1):10)
+     inSameGroup[i,j] = 0
+
+#sum of the subjects' variance in each group
+var123plus <- vector("double", length = 58)  
+
+
+get_sigma_index <- function(a,b)
+{
+   str=paste(as.character(a),as.character(b),sep="")
+   x <- which(sigma_index == str)
+   return (x)
+} 
+
+
+for(i in 1:58){   
+  for(j in 2:df3[i,1]){  #2
+    for(k in (j+1):(df3[i,1]+1)){  #3,4
+        mtrx[i, get_sigma_index(df3[i,j],df3[i,k]) ] = sqrt(each_subj_var[df3[i,j]]*each_subj_var[df3[i,k]])  #correlation coefficient
+        inSameGroup[df3[i,j],df3[i,k]]=inSameGroup[df3[i,j],df3[i,k]] + 1
+    }
+    var123plus[i] = var123plus[i] + each_subj_var[ df3[i,j] ]
+  }
+  var123plus[i]= var123plus[i] + each_subj_var[ df3[i,j+1] ]
+}
+
+inSameGroup
+
+#each_group_var[60]  =  2 * mtrx[60,45] %*% [45,1]  +  var123plus[60]
+# =>  y1[60] =  mtrx[60,45] %*% [45,1]
+y1 <- vector("double", length = 58) 
+for(i in 1:58){
+   y1[i] = each_group_var[i] - var123plus[i]
+   y1[i]= y1[i]/2
+}
+
+mtrx_orig = mtrx
+```
+
+
+#OLS: 預測相關係數矩陣
+y1[58] =  mtrx[58,45] %*% [45,1]
+
+Remove rare rows and columns:
+columns '49' '410' and associated rows
+```{r}
+#Remove rare rows
+ind1 = mtrx_orig[, '49'] == 0
+ind2 = mtrx_orig[, '410'] == 0
+rowind = ind1 & ind2
+y2 = y1[rowind]
+
+mtrx2 = data.frame(mtrx_orig[rowind,])
+mtrx2 = mtrx2[,which(colSums(abs(mtrx2))!=0)]  #remove column if the whole column are all 0
+mtrx2 = mtrx2[,!colnames(mtrx2) %in% 'X49']    #remove column 'X49' since only one group contains both subject4 & subject9
+mtrx2 = mtrx2[,!colnames(mtrx2) %in% 'X410']
+
+summary( lm(y2~.,data = mtrx2) )
+```
+
+no intercept
+```{r}
+summary( lm(y2~.-1,data = mtrx2) )
+```
+
+##國,英,數甲,物,化,生
+remove  combinations of 4, 5, 6, 7
+this includes, X45, X46, X47, X56, X57, X67
+
+```{r}
+mtrx_orig2 = data.frame(mtrx_orig)
+cind1 = colnames(mtrx_orig2) %in% c('X24', 'X25', 'X26', 'X27', 'X45', 'X46', 'X47', 'X56', 'X57', 'X67')
+tmp1 = mtrx_orig2[,cind1]
+tmp2 = rowSums(tmp1)
+#keep only if row sums are zero
+rowind3 = tmp2 == 0
+mtrx_orig2a = mtrx_orig2[rowind3,!cind1]
+#keep only if column sums are not zero
+tmp3 = colSums(mtrx_orig2a)
+mtrx_orig2a = mtrx_orig2a[, tmp3 != 0]
+y3 = y1[rowind3]
+
+summary( lm(y3~.,data = mtrx_orig2a) )
+```

@@ -1,0 +1,67 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+firstly compile the 108 cov_mtrx.RMD  
+
+# 1.將原始成績轉換為權重為1時的成績
+coverted_min_admiScore1[]: 多變數常態分布調整
+coverted_min_admiScore2[]: 直接除
+// length = departments_num
+
+```{r}
+df1 = read.csv("../data/104 各系最低錄取分數&錄取人數1.csv", stringsAsFactors = FALSE)
+cov_mtrx108 = cov_mtrx104
+
+
+#df_cat3
+noz = df1[,'生物']!=0
+#df1 = df1[noz,]
+#df_cat2
+noz0 = df1[,'生物']==0
+noz1 = df1[,'物理']!=0
+noz2 = df1[,'化學']!=0
+noz3 = df1[,'數學甲']!=0
+rowind = (noz1 | noz2 | noz3) & noz0
+#df1= df1[rowind,]
+#第一類組
+noz4 = df1[,'數學乙']!=0
+noz5 = df1[,'歷史']!=0
+noz6 = df1[,'地理']!=0
+noz7 = df1[,'公民與社會']!=0
+rowind2 = (noz4 | noz5 | noz6 | noz7) & noz0 & !noz1 & !noz2
+df1= df1[rowind2,]
+
+departments_num = nrow(df1)
+coverted_min_admiScore1 <- vector("double", length = departments_num)    #computed by covariance matrix
+coverted_min_admiScore2 <- vector("double", length = departments_num)    #devided the min admiScore from excel directly
+
+for(i in 1:departments_num){   #departments_num
+   orig_weight <- c()
+   converted_weight <- c()  #either 0 or 1
+   
+   orig_dep_score = as.numeric(df1[i, '普通生錄取分數'])
+   
+   for(j in 4:13)
+      orig_weight  = c(orig_weight, df1[i,j])
+   a2 = matrix( orig_weight, nrow=10 )
+   converted_weight = orig_weight != 0      #FFTFFFFTTF
+   converted_weight = converted_weight+0    #cast to integer
+   a1 = matrix( converted_weight, nrow=10 )
+   
+   all_one_weight <- c(1,1,0,1,1,1,1,0,0,0)
+   all_one_a1 = matrix( all_one_weight, nrow=10 )
+
+   coverted_min_admiScore1[i] = t(all_one_weight)%*%each_subj_mean + (t(all_one_weight)%*%cov_mtrx108%*%a2)/(t(a2)%*%cov_mtrx108%*%a2)*(orig_dep_score-t(a2)%*%each_subj_mean)   
+  coverted_min_admiScore2[i] = orig_dep_score/sum(orig_weight)*sum(converted_weight)
+}
+
+df1$year = 104
+df1$new_score = coverted_min_admiScore1
+#od1 = order(df1$new_rank,decreasing = TRUE) 
+#df1 = df1[od1,]
+
+print(sum(is.na(coverted_min_admiScore1)))
+write.table(df1, "C:/Users/aduser01/Desktop/all.csv", sep=",", append = TRUE)
+```
+

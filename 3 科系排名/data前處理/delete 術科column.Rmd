@@ -1,0 +1,13 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+#delete the column of 術科 & 有採計術科的科系
+```{r}
+df1 = read.csv("108 各系最低錄取分數&錄取人數(含術科).csv")
+ind1 = df1[, '術科'] == 0   #TTTTTTTTFTT
+df1  = df1[ind1,]
+df1  = df1[,-14]
+write.table(df1,file="108 各系最低錄取分數&錄取人數1.csv",sep=",")
+```
